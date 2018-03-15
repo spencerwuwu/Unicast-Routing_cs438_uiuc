@@ -9,6 +9,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <pthread.h>
+#include <time.h>
 
 extern int globalMyID;
 //last time you heard from each node. TODO: you will want to monitor this
