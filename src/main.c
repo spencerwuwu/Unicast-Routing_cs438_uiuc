@@ -27,6 +27,12 @@ int globalSocketUDP;
 //pre-filled for sending to 10.1.1.0 - 255, port 7777
 struct sockaddr_in globalNodeAddrs[256];
 
+// link state database
+LSDB *my_db = NULL;
+LSP *my_LSP = NULL;
+
+FILE *init_cost = NULL;
+FILE *log_file = NULL;
  
 int main(int argc, char** argv)
 {
@@ -77,6 +83,12 @@ int main(int argc, char** argv)
 		exit(1);
 	}
 	
+    // Init local LSP, LSDB, file I/O
+    my_db = init_LSDB(globalMyID);
+    my_LSP = init_local_LSP(globalMyID);
+    init_cost = fopen(argv[2], "r");
+    log_file = fopen(argv[3], "w+");
+    
 	
 	//start threads... feel free to add your own, and to remove the provided ones.
 	pthread_t announcerThread;

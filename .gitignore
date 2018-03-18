@@ -1,3 +1,6 @@
+src/vec_router
+src/ls_router
+
 # Prerequisites
 *.d
 

@@ -10,6 +10,8 @@
 #include <netdb.h>
 #include <pthread.h>
 #include <time.h>
+#include "LSP.h"
+#include "monitor_neighbors.h"
 
 extern int globalMyID;
 //last time you heard from each node. TODO: you will want to monitor this
@@ -20,6 +22,8 @@ extern struct timeval globalLastHeartbeat[256];
 extern int globalSocketUDP;
 //pre-filled for sending to 10.1.1.0 - 255, port 7777
 extern struct sockaddr_in globalNodeAddrs[256];
+
+extern LSDB *my_db;
 
 
 //Yes, this is terrible. It's also terrible that, in Linux, a socket
