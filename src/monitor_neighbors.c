@@ -24,6 +24,9 @@ extern int globalSocketUDP;
 extern struct sockaddr_in globalNodeAddrs[256];
 
 extern LSDB *my_db;
+extern LSP *my_LSP;
+extern pthread_mutex_t mutex;
+extern FILE *log_file;
 
 
 //Yes, this is terrible. It's also terrible that, in Linux, a socket
@@ -43,10 +46,16 @@ void* announceToNeighbors(void* unusedParam)
 	struct timespec sleepFor;
 	sleepFor.tv_sec = 0;
 	sleepFor.tv_nsec = 300 * 1000 * 1000; //300 ms
-	while(1)
-	{
-		hackyBroadcast("HEREIAM", 7);
+    int index = 0;
+    char *buff = NULL;
+	while(1) {
+        pthread_mutex_lock(&mutex);
+        buff = create_msg(my_LSP, &index);
+        pthread_mutex_unlock(&mutex);
+		hackyBroadcast(buff, strlen(buff) + 1);
 		nanosleep(&sleepFor, 0);
+        free(buff);
+        buff = NULL;
 	}
 }
 
@@ -84,24 +93,41 @@ void listenForNeighbors()
 		
 		//Is it a packet from the manager? (see mp2 specification for more details)
 		//send format: 'send'<4 ASCII bytes>, destID<net order 2 byte signed>, <some ASCII message>
-		if(!strncmp(recvBuf, "send", 4))
-		{
+		if(!strncmp(recvBuf, "send", 4)) {
 			//TODO send the requested message to the requested destination node
 			// ...
-		}
-		//'cost'<4 ASCII bytes>, destID<net order 2 byte signed> newCost<net order 4 byte signed>
-		else if(!strncmp(recvBuf, "cost", 4))
-		{
+		} else if(!strncmp(recvBuf, "cost", 4)) {
+		    //'cost'<4 ASCII bytes>, destID<net order 2 byte signed> newCost<net order 4 byte signed>
 			//TODO record the cost change (remember, the link might currently be down! in that case,
 			//this is the new cost you should treat it as having once it comes back up.)
 			// ...
-		}
-		
-		//TODO now check for the various types of packets you use in your own protocol
-		//else if(!strncmp(recvBuf, "your other message types", ))
-		// ... 
-	}
-	//(should never reach here)
-	close(globalSocketUDP);
+            int neighbor = 0;
+            long cost = 0;
+            int i = 4;
+            for ( ; i < 10; i++) {
+                if (i < 6) { 
+                    neighbor = neighbor * 10 + recvBuf[i] - '0';
+                } else {
+                    cost = cost * 10 + recvBuf[i] - '0';
+                }
+            }
+            pthread_mutex_lock(&mutex);
+            my_LSP->sequence_num++;
+            update_self_lsp(my_LSP, 0, neighbor, my_LSP->sequence_num, cost);
+            pthread_mutex_unlock(&mutex);
+        } else if (!strncmp(recvBuf, "0,", 2)) {
+            //TODO now check for the various types of packets you use in your own protocol
+            //else if(!strncmp(recvBuf, "your other message types", ))
+            // ... 
+            if (receive_lsp(my_db, my_LSP, recvBuf)) {
+                hackyBroadcast(recvBuf, strlen(recvBuf) + 1);
+            }
+        } else if(!strncmp(recvBuf, "forward", 7)) {
+        } else if(!strncmp(recvBuf, "alive", 5)) {
+        } else if(!strncmp(recvBuf, "pass", 4)) {
+        } else if(!strncmp(recvBuf, "ack", 3)) {
+        }
+    }
+    //(should never reach here)
+    close(globalSocketUDP);
 }
-

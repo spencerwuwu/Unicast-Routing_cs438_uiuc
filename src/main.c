@@ -84,10 +84,10 @@ int main(int argc, char** argv)
 	}
 	
     // Init local LSP, LSDB, file I/O
-    my_db = init_LSDB(globalMyID);
-    my_LSP = init_local_LSP(globalMyID);
     init_cost = fopen(argv[2], "r");
     log_file = fopen(argv[3], "w+");
+    my_db = init_LSDB(globalMyID);
+    my_LSP = init_local_LSP(globalMyID, init_cost);
     
 	
 	//start threads... feel free to add your own, and to remove the provided ones.
