@@ -1,10 +1,12 @@
-#define MSG_SIZE 20
+#define MSG_SIZE 30 
+#define ALIVE 30 
 
 typedef struct LSP_pair {
     int neighbor;
     long cost;
     int sequence_number;
     struct LSP_pair *next;
+    struct LSP_pair *prev;
 } LSP_pair;
 
 typedef struct LSP {
@@ -13,6 +15,7 @@ typedef struct LSP {
     int alive;
     int confirmed;
     struct LSP_pair *pair;
+    struct LSP *prev;
     struct LSP *next;
 } LSP;
 
@@ -41,7 +44,6 @@ typedef struct LSP_tentative_node {
 
 typedef struct LSP_tentative {
     LSP_tentative_node *node;
-    int size;
 } LSP_tentative;
 
 LSDB *init_LSDB(int ID);
@@ -52,7 +54,7 @@ void parse_initcost(int *neighbor, long *cost, char *msg);
 /* Create msg for the index th pair in self's LSP.
  * Round back if index reaches pair_num
  */
-char *create_msg(LSP *lsp, int *index);
+char *create_cost_msg(LSP *lsp, int *index);
 
 /* Receive and update LSP or LSDB
  * If the message if originally sent by oneself, return 0.
@@ -62,19 +64,25 @@ int receive_lsp(LSDB *db, LSP *my_LSP, char *msg);
 
 void update_self_lsp(LSP *my_LSP, int sender_id, int neighbor, int sequence_num, long cost);
 
-void update_LSDB(LSDB *my_db, LSDB *my_db, int sender_id, int neighbor, int sequence_num, long cost);
+void update_LSDB(LSDB *my_db, int sender_id, int neighbor, int sequence_num, long cost);
+
+int is_neighbor(LSP *my_LSP, int target);
+
+void set_alive(LSDB *my_db, int sender_ID);
 
 /* LSP requried function */
-LSP_tentative *init_intative();
-int parse_send_msg(char *buff);
-int LSP_decide(int target);
+int LSP_decide(LSDB *my_db, int target);
 
-int build_topo(LSDB *my_db);
+// Topo build entry
+void build_topo(LSDB *my_db, LSP *my_LSP);
+LSP_tentative *init_tentative();
 void cleanup_topo(LSDB *my_db);
-int check_node_alive(int id);
-int check_node_confirmed(int id);
-void make_node_confirmed(int id);
-LSP *get_node(int id);
-void tentative_update(LSP_tentative *tentative, int neighbor, long cost, int neighbor_id);
-
+int check_node_alive(LSDB *my_db, int id);
+int check_node_confirmed(LSDB *my_db, int id);
+void make_node_confirmed(LSDB *my_db, int id);
+LSP *get_node(LSDB *my_db, int id);
+void tentative_update(LSDB *my_db, LSP_tentative *tentative, int neighbor, long cost, int neighbor_id);
 void pop_and_push_tentative(LSP_tentative *tentative, LSDB *my_db);
+int tentative_end(LSDB *my_db, LSP_tentative *tentative);
+
+/* Debug function */

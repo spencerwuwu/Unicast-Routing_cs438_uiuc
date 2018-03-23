@@ -30,6 +30,7 @@ struct sockaddr_in globalNodeAddrs[256];
 // link state database
 LSDB *my_db = NULL;
 LSP *my_LSP = NULL;
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 FILE *init_cost = NULL;
 FILE *log_file = NULL;
