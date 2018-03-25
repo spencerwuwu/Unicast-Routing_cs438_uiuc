@@ -61,8 +61,10 @@ char *create_cost_msg(LSP *lsp, int *index);
  * Else return 1
  */
 int receive_lsp(LSDB *db, LSP *my_LSP, char *msg);
+int receive_neighbor_lsp(LSDB *my_db, LSP *my_LSP, char *msg);
+void receive_cost(LSDB *db, LSP *my_LSP, char *msg);
 
-void update_self_lsp(LSP *my_LSP, int sender_id, int neighbor, int sequence_num, long cost);
+void update_self_lsp(LSDB *my_db, LSP *my_LSP, int sender_id, int sequence_num, long cost);
 
 void update_LSDB(LSDB *my_db, int sender_id, int neighbor, int sequence_num, long cost);
 

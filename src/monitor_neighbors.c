@@ -41,8 +41,10 @@ void hackyBroadcast(const char* buf, int length)
             sendto(globalSocketUDP, buf, length, 0,
                     (struct sockaddr*)&globalNodeAddrs[i], sizeof(globalNodeAddrs[i]));
         }
+    write(2, buf, length);
 }
 
+    //fprintf(stderr, "gg\n");
 void* announceToNeighbors(void* unusedParam)
 {
     char alive_msg[100];
@@ -57,17 +59,18 @@ void* announceToNeighbors(void* unusedParam)
     int index = 0;
     char *buff = NULL;
     while(1) {
-        while (index != 0) {
+        do {
             pthread_mutex_lock(&mutex);
             buff = create_cost_msg(my_LSP, &index);
             pthread_mutex_unlock(&mutex);
             hackyBroadcast(buff, strlen(buff) + 1);
             free(buff);
             buff = NULL;
-            if (index == 0) 
+            if (index == 0) {
                 hackyBroadcast(alive_msg, strlen(alive_msg) + 1);
+            }
             nanosleep(&sleepInst, 0);
-        }
+        } while (index != 0);
         nanosleep(&sleepFor, 0);
         pthread_mutex_lock(&mutex);
         decrease_alive();
@@ -137,20 +140,31 @@ void listenForNeighbors()
             //TODO record the cost change (remember, the link might currently be down! in that case,
             //this is the new cost you should treat it as having once it comes back up.)
             // ...
+            pthread_mutex_lock(&mutex);
+                receive_cost(my_db, my_LSP, recvBuf);
+            pthread_mutex_unlock(&mutex);
+
+        } else if(!strncmp(recvBuf, "fcost", 5)) {
+            // Forwarding other's lsp msg
             int neighbor = 0;
             long cost = 0;
-            int i = 4;
-            for ( ; i < 10; i++) {
-                if (i < 6) { 
-                    neighbor = neighbor * 10 + recvBuf[i] - '0';
-                } else {
-                    cost = cost * 10 + recvBuf[i] - '0';
-                }
-            }
             pthread_mutex_lock(&mutex);
-            if (receive_lsp(my_db, my_LSP, recvBuf))
-                hackyBroadcast(recvBuf, 10);
+            if (receive_lsp(my_db, my_LSP, recvBuf)) {
+                hackyBroadcast(recvBuf, strlen(recvBuf) + 1);
+            }
             pthread_mutex_unlock(&mutex);
+
+        } else if(!strncmp(recvBuf, "ncost", 5)) {
+            // Forwarding other's lsp msg
+            int neighbor = 0;
+            long cost = 0;
+            pthread_mutex_lock(&mutex);
+            if (receive_lsp(my_db, my_LSP, recvBuf)) {
+                recvBuf[0] = 'f';
+                hackyBroadcast(recvBuf, strlen(recvBuf) + 1);
+            }
+            pthread_mutex_unlock(&mutex);
+
         } else if(!strncmp(recvBuf, "alive", 5)) {
             int target = 0;
             int i = 5;

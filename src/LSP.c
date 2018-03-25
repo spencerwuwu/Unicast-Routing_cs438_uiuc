@@ -32,7 +32,7 @@ LSP *init_local_LSP(int ID, FILE *init_cost) {
     size_t size;
     int neighbor = 0;
     long cost = 0;
-    LSP_pair *pair = lsp->pair;
+    LSP_pair *pair = NULL;
     LSP_pair *prev_pair = NULL;
     while (getline(&buff, &size, init_cost) > 0) {
         pair_num++;
@@ -43,29 +43,20 @@ LSP *init_local_LSP(int ID, FILE *init_cost) {
         pair->sequence_number = 0;
         pair->prev = prev_pair;
         pair->next = NULL;
+        if (pair_num == 1) lsp->pair = pair;
         if (prev_pair) prev_pair->next = pair;
         prev_pair = pair;
         pair = pair->next;
     }
+    lsp->pair_num = pair_num;
     return lsp;
 }
 
 void parse_initcost(int *neighbor, long *cost, char *msg) {
     int neighbor_p = 0;
     long cost_p = 0;
-    int i = 0, flag = 0;
-    while (msg[i] && msg[i] != '\n') {
-        if (flag == 0) {
-            if (msg[i] != ' ') {
-                flag = 1;
-            } else {
-                neighbor_p = *neighbor * 10 + msg[i] - '0';
-            }
-        } else {
-            cost_p = cost_p * 10 + msg[i] - '0';
-        }
-        i++;
-    }
+    if (msg[strlen(msg)] == '\n') sscanf(msg, "%d %ld\n", &neighbor_p, &cost_p);
+    else sscanf(msg, "%d %ld", &neighbor_p, &cost_p);
     *neighbor = neighbor_p;
     *cost = cost_p;
 }
@@ -86,30 +77,54 @@ char *create_cost_msg(LSP *lsp, int *index) {
     }
 
     char *buff = calloc(sizeof(char), MSG_SIZE);
-    sprintf(buff, "cost%d,%d,%ld,%d", lsp->sender_id, target->neighbor, target->cost, target->sequence_number);
+    sprintf(buff, "ncost%d,%d,%ld,%d", lsp->sender_id, target->neighbor, target->cost, target->sequence_number);
     return buff;
+}
+
+/* the whole receive functions are wrapped with mutex at 
+ * monitor_neighbors.c
+ */
+void receive_cost(LSDB *my_db, LSP *my_LSP, char *msg) {
+    int neighbor;
+    long cost;
+    int i = 4;
+    for ( ; i < 6; i++) 
+        neighbor = neighbor * 10 + msg[i] - '0';
+    for ( ; i < 10; i++) 
+        cost = cost * 10 + msg[i] - '0';
+    update_self_lsp(my_db, my_LSP, neighbor, -1, cost);
+}
+
+int receive_neighbor_lsp(LSDB *my_db, LSP *my_LSP, char *msg) {
+    int sender_id, neighbor, sequence_num;
+    long cost;
+    sscanf(msg, "ncost%d,%d,%ld,%d", &sender_id, &neighbor, &cost, &sequence_num);
+    set_alive(my_db, neighbor);
+
+    // hacky way to set up the cost 1 neighbor
+    if (neighbor != my_LSP->sender_id && !is_neighbor(my_LSP, neighbor)) {
+        update_self_lsp(my_db, my_LSP, neighbor, -1, 1);
+    } else {
+        update_self_lsp(my_db, my_LSP, sender_id, -1, 1);
+    }
+    update_LSDB(my_db, sender_id, neighbor, sequence_num, cost);
+    if (neighbor == my_LSP->sender_id) return 0;
+    else return 1;
 }
 
 int receive_lsp(LSDB *my_db, LSP *my_LSP, char *msg) {
     int sender_id, neighbor, sequence_num;
     long cost;
-    sscanf(msg, "cost%d,%d,%ld,%d", &sender_id, &neighbor, &cost, &sequence_num);
+    sscanf(msg, "fcost%d,%d,%ld,%d", &sender_id, &neighbor, &cost, &sequence_num);
 
     // If the message is originally sent by self, exit
-    if (sender_id == my_LSP->sender_id) return 0;
-
     // If the neighbor is self, mean it is a neighbor
-    if (neighbor == my_LSP->sender_id) {
-        pthread_mutex_lock(&mutex);
-        update_self_lsp(my_LSP, sender_id, neighbor, sequence_num, cost);
-        pthread_mutex_unlock(&mutex);
-    }
-    pthread_mutex_lock(&mutex);
-    set_alive(my_db, sender_id);
+    if (sender_id == my_LSP->sender_id || neighbor == my_LSP->sender_id) return 0;
+
     update_LSDB(my_db, sender_id, neighbor, sequence_num, cost);
-    pthread_mutex_unlock(&mutex);
     return 1;
 }
+
 void set_alive(LSDB *my_db, int id) {
     LSP *lsp = my_db->lsp;
     while (lsp) {
@@ -120,13 +135,16 @@ void set_alive(LSDB *my_db, int id) {
     }
 }
 
-void update_self_lsp(LSP *my_LSP, int sender_id, int neighbor, int sequence_num, long cost) {
+void update_self_lsp(LSDB *my_db, LSP *my_LSP, int sender_id, int sequence_num, long cost) {
 
     LSP_pair *target = my_LSP->pair;
     LSP_pair *prev = NULL;
     while (target) {
         if (target->neighbor == sender_id) {
-            if (sequence_num >= target->sequence_number) {
+            if (sequence_num < 0) {
+                target->cost = cost;
+                target->sequence_number++;
+            } else if (sequence_num >= target->sequence_number) {
                 target->cost = cost;
                 target->sequence_number = sequence_num;
             }
@@ -138,11 +156,29 @@ void update_self_lsp(LSP *my_LSP, int sender_id, int neighbor, int sequence_num,
     // If not found, means it's a new neighbor
     my_LSP->pair_num++;
     target = malloc(sizeof(LSP_pair));
-    target->sequence_number = sequence_num;
+    if (sequence_num >= 0) target->sequence_number = sequence_num;
+    else target->sequence_number = 0;
     target->neighbor = sender_id;
     target->cost = cost;
     target->next = NULL;
+    target->prev = prev;
     if (prev) prev->next = target;
+
+    // Construct the new LSP for the node as well
+    LSP *lsp = my_db->lsp;
+    LSP *prev_lsp = NULL;
+    while (lsp) {
+        prev_lsp = lsp;
+        lsp = lsp->next;
+    }
+    lsp = malloc(sizeof(LSP));
+    lsp->sender_id = sender_id;
+    lsp->pair_num = 0;
+    lsp->alive = 0;
+    lsp->confirmed = 0;
+    lsp->pair = 0;
+    lsp->prev = NULL;
+    lsp->next = NULL;
 }
 
 void update_LSDB(LSDB *my_db, int sender_id, int neighbor, int sequence_num, long cost) {
