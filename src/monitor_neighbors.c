@@ -152,7 +152,7 @@ void listenForNeighbors()
                             (struct sockaddr*)&globalNodeAddrs[next_hop], 
                             sizeof(globalNodeAddrs[next_hop]));
                     if (is_neighbor(my_LSP, target)) {
-                        log_send(target, recvBuf, bytesRecvd);
+                        log_send(target, next_hop, recvBuf, bytesRecvd);
                     } else {
                         log_forward(target, next_hop, recvBuf, bytesRecvd);
                     }
@@ -201,10 +201,10 @@ void calculate_neighbor_alive() {
     }
 }
 
-void log_send(int target, unsigned char *buff, int length) {
+void log_send(int target, int next, unsigned char *buff, int length) {
     fprintf(stderr, "%d: ", globalMyID);
-    fprintf(log_file, "sending packet dest %d message ", target);
-    fprintf(stderr, "sending packet dest %d message ", target);
+    fprintf(log_file, "sending packet dest %d nexthop %d message ", target, next);
+    fprintf(stderr, "sending packet dest %d nexthop %d message ", target, next);
     int i = 6;
     for ( ; i < length; i++) {
         fprintf(log_file, "%c", buff[i]);
