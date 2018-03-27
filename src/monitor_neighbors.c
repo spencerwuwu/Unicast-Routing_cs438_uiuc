@@ -41,14 +41,13 @@ void hackyBroadcast(const char* buf, int length)
             sendto(globalSocketUDP, buf, length, 0,
                     (struct sockaddr*)&globalNodeAddrs[i], sizeof(globalNodeAddrs[i]));
         }
-    write(2, buf, length);
+    //print_send(globalMyID, buf, length);
 }
 
-    //fprintf(stderr, "gg\n");
 void* announceToNeighbors(void* unusedParam)
 {
     char alive_msg[100];
-    sprintf(alive_msg, "alive%d", globalMyID);
+    sprintf(alive_msg, "alive%03d", globalMyID);
     struct timespec sleepFor;
     sleepFor.tv_sec = 0;
     sleepFor.tv_nsec = 300 * 1000 * 1000; //300 ms
@@ -58,23 +57,31 @@ void* announceToNeighbors(void* unusedParam)
     sleepInst.tv_nsec = 30 * 1000 * 1000; //30 ms
     int index = 0;
     char *buff = NULL;
+    LSP *lsp = NULL;
+    // TODO
     while(1) {
-        do {
-            pthread_mutex_lock(&mutex);
-            buff = create_cost_msg(my_LSP, &index);
-            pthread_mutex_unlock(&mutex);
-            hackyBroadcast(buff, strlen(buff) + 1);
-            free(buff);
-            buff = NULL;
-            if (index == 0) {
-                hackyBroadcast(alive_msg, strlen(alive_msg) + 1);
-            }
-            nanosleep(&sleepInst, 0);
-        } while (index != 0);
-        nanosleep(&sleepFor, 0);
-        pthread_mutex_lock(&mutex);
-        decrease_alive();
-        pthread_mutex_unlock(&mutex);
+        /*
+        fprintf(stderr, "announce:");
+        print_db(my_db, my_LSP);
+        */
+        lsp = my_db->lsp;
+        while (lsp) {
+            do {
+                pthread_mutex_lock(&mutex);
+                buff = create_cost_msg(lsp, &index);
+                pthread_mutex_unlock(&mutex);
+                if (buff) {
+                    hackyBroadcast(buff, strlen(buff) + 1);
+                    free(buff);
+                    buff = NULL;
+                }
+                nanosleep(&sleepInst, 0);
+            } while (index != 0);
+            lsp = lsp->next;
+        }
+        hackyBroadcast(alive_msg, strlen(alive_msg) + 1);
+        //nanosleep(&sleepFor, 0);
+        nanosleep(&sleepInst, 0);
     }
 }
 
@@ -107,7 +114,17 @@ void listenForNeighbors()
             //TODO: this node can consider heardFrom to be directly connected to it; do any such logic now.
 
             //record that we heard from heardFrom just now.
-            gettimeofday(&globalLastHeartbeat[heardFrom], 0);
+            if (heardFrom >= 0) {
+                gettimeofday(&globalLastHeartbeat[heardFrom], 0);
+
+                if (!is_neighbor(my_LSP, heardFrom)) {
+                    update_self_lsp(my_db, my_LSP, heardFrom, 0, 1, 1);
+                }
+                if (!get_node(my_db, heardFrom)) {
+                    init_lsp(my_db, heardFrom);
+                }
+                set_pair_alive(my_db, globalMyID, heardFrom);
+            }
         }
 
         //Is it a packet from the manager? (see mp2 specification for more details)
@@ -115,62 +132,44 @@ void listenForNeighbors()
         if(!strncmp(recvBuf, "send", 4)) {
             //TODO send the requested message to the requested destination node
             // ...
-            int target = 0;
-            int i = 4;
-            for ( ; i < 6; i++) 
-                target = target * 10 + recvBuf[i] - '0';
-            int next_hop = LSP_decide(my_db, target);
-            if (next_hop == globalMyID) {
-                log_recv(recvBuf + 6);
-            }
-            if (next_hop >= 0) {
-                if (is_neighbor(my_LSP, next_hop)) {
-                    log_send(target, recvBuf + 6);
-                } else {
-                    log_forward(target, next_hop, recvBuf + 6);
-                }
-                sendto(globalSocketUDP, recvBuf, strlen(recvBuf) + 1, 0, 
-                        (struct sockaddr*)&globalNodeAddrs[next_hop], 
-                        sizeof(globalNodeAddrs[next_hop]));
+            //print_recv(globalMyID, heardFrom, recvBuf);
+            //print_send(globalMyID, recvBuf, bytesRecvd);
+            int16_t target = (recvBuf[4] << 8) + (recvBuf[5] & 0xff);
+            pthread_mutex_lock(&mutex);
+            build_topo(my_db, my_LSP);
+            pthread_mutex_unlock(&mutex);
+
+            if (target == (int16_t)globalMyID) {
+                log_recv(recvBuf, bytesRecvd);
             } else {
-                log_failed(target);
+                int next_hop = LSP_decide(my_db, target);
+                if (next_hop >= 0) {
+                    sendto(globalSocketUDP, recvBuf, bytesRecvd, 0, 
+                            (struct sockaddr*)&globalNodeAddrs[next_hop], 
+                            sizeof(globalNodeAddrs[next_hop]));
+                    if (is_neighbor(my_LSP, target)) {
+                        log_send(target, recvBuf, bytesRecvd);
+                    } else {
+                        log_forward(target, next_hop, recvBuf, bytesRecvd);
+                    }
+                } else {
+                    log_failed(target);
+                }
             }
         } else if(!strncmp(recvBuf, "cost", 4)) {
             //'cost'<4 ASCII bytes>, destID<net order 2 byte signed> newCost<net order 4 byte signed>
             //TODO record the cost change (remember, the link might currently be down! in that case,
             //this is the new cost you should treat it as having once it comes back up.)
             // ...
+            int16_t target = (recvBuf[4] << 8) + (recvBuf[5] & 0xff);
+            int32_t cost = (recvBuf[6] << 24) + (recvBuf[7] << 16) + (recvBuf[8] << 8) + (recvBuf[9] & 0xff);
             pthread_mutex_lock(&mutex);
-                receive_cost(my_db, my_LSP, recvBuf);
+            update_self_lsp(my_db, my_LSP, target, -1, cost, 0);
             pthread_mutex_unlock(&mutex);
+        print_db(my_db, my_LSP);
 
         } else if(!strncmp(recvBuf, "fcost", 5)) {
-            // Forwarding other's lsp msg
-            int neighbor = 0;
-            long cost = 0;
-            pthread_mutex_lock(&mutex);
-            if (receive_lsp(my_db, my_LSP, recvBuf)) {
-                hackyBroadcast(recvBuf, strlen(recvBuf) + 1);
-            }
-            pthread_mutex_unlock(&mutex);
-
-        } else if(!strncmp(recvBuf, "ncost", 5)) {
-            // Forwarding other's lsp msg
-            int neighbor = 0;
-            long cost = 0;
-            pthread_mutex_lock(&mutex);
-            if (receive_lsp(my_db, my_LSP, recvBuf)) {
-                recvBuf[0] = 'f';
-                hackyBroadcast(recvBuf, strlen(recvBuf) + 1);
-            }
-            pthread_mutex_unlock(&mutex);
-
-        } else if(!strncmp(recvBuf, "alive", 5)) {
-            int target = 0;
-            int i = 5;
-            for ( ; i < 7; i++) 
-                target = target * 10 + recvBuf[i] - '0';
-            set_alive(my_db, target);
+            receive_lsp(my_db, my_LSP, recvBuf);
         }
     }
     //(should never reach here)
@@ -178,27 +177,51 @@ void listenForNeighbors()
 }
 // TODO initial of cost 1
 
-void decrease_alive() {
-    LSP *lsp = my_db->lsp;
-    while (lsp) {
-        if (lsp->alive != 0) lsp->alive--;
-        lsp = lsp->next;
+void log_send(int target, unsigned char *buff, int length) {
+    fprintf(stderr, "%d: ", globalMyID);
+    fprintf(log_file, "sending packet dest %d message ", target);
+    fprintf(stderr, "sending packet dest %d message ", target);
+    int i = 6;
+    for ( ; i < length; i++) {
+        fprintf(log_file, "%c", buff[i]);
+        fprintf(stderr, "%c", buff[i]);
     }
-    build_topo(my_db, my_LSP);
+    fprintf(log_file, "\n");
+    fprintf(stderr, "\n");
+    fflush(log_file);
 }
 
-void log_send(int target, char *buff) {
-    fprintf(log_file, "sending packet dest %d message %s\n", target, buff);
+void log_recv(char *buff, int length) {
+    fprintf(log_file, "receive packet message ");
+    fprintf(stderr, "%d: ", globalMyID);
+    fprintf(stderr, "receive packet message ");
+    int i = 6;
+    for ( ; i < length; i++) {
+        fprintf(log_file, "%c", buff[i]);
+        fprintf(stderr, "%c", buff[i]);
+    }
+    fprintf(log_file, "\n");
+    fprintf(stderr, "\n");
+    fflush(log_file);
 }
 
-void log_recv(char *buff) {
-    fprintf(log_file, "receive packet message %s\n", buff);
-}
-
-void log_forward(int target, int next_hop, char *buff) {
-    fprintf(log_file, "forward packet dest %d nexthop %d message %s\n", target, next_hop, buff);
+void log_forward(int target, int next_hop, unsigned char *buff, int length) {
+    fprintf(log_file, "forward packet dest %d nexthop %d message ", target, next_hop);
+    fprintf(stderr, "%d: ", globalMyID);
+    fprintf(stderr, "forward packet dest %d nexthop %d message ", target, next_hop);
+    int i = 6;
+    for ( ; i < length; i++) {
+        fprintf(log_file, "%c", buff[i]);
+        fprintf(stderr, "%c", buff[i]);
+    }
+    fprintf(log_file, "\n");
+    fprintf(stderr, "\n");
+    fflush(log_file);
 }
 
 void log_failed(int target) {
     fprintf(log_file, "unreachable dest %d\n", target);
+    fprintf(stderr, "%d: ", globalMyID);
+    fprintf(stderr, "unreachable dest %d\n", target);
+    fflush(log_file);
 }

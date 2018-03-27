@@ -5,6 +5,7 @@ typedef struct LSP_pair {
     int neighbor;
     long cost;
     int sequence_number;
+    int alive;
     struct LSP_pair *next;
     struct LSP_pair *prev;
 } LSP_pair;
@@ -29,7 +30,6 @@ typedef struct LSP_topo {
 
 typedef struct LSDB {
     int my_ID;
-    int lsp_num;
     LSP *lsp;
     LSP_topo *topo;
 } LSDB;
@@ -44,6 +44,7 @@ typedef struct LSP_tentative_node {
 
 typedef struct LSP_tentative {
     LSP_tentative_node *node;
+    int end_flag;
 } LSP_tentative;
 
 LSDB *init_LSDB(int ID);
@@ -61,16 +62,19 @@ char *create_cost_msg(LSP *lsp, int *index);
  * Else return 1
  */
 int receive_lsp(LSDB *db, LSP *my_LSP, char *msg);
-int receive_neighbor_lsp(LSDB *my_db, LSP *my_LSP, char *msg);
 void receive_cost(LSDB *db, LSP *my_LSP, char *msg);
 
-void update_self_lsp(LSDB *my_db, LSP *my_LSP, int sender_id, int sequence_num, long cost);
+void update_self_lsp(LSDB *my_db, LSP *my_LSP, int sender_id, int sequence_num, long cost, int alive);
+
+void init_lsp(LSDB *my_db, int sender_id);
 
 void update_LSDB(LSDB *my_db, int sender_id, int neighbor, int sequence_num, long cost);
 
 int is_neighbor(LSP *my_LSP, int target);
 
 void set_alive(LSDB *my_db, int sender_ID);
+
+void set_pair_alive(LSDB *my_db, int sender_ID, int neighbor);
 
 /* LSP requried function */
 int LSP_decide(LSDB *my_db, int target);
@@ -83,8 +87,12 @@ int check_node_alive(LSDB *my_db, int id);
 int check_node_confirmed(LSDB *my_db, int id);
 void make_node_confirmed(LSDB *my_db, int id);
 LSP *get_node(LSDB *my_db, int id);
-void tentative_update(LSDB *my_db, LSP_tentative *tentative, int neighbor, long cost, int neighbor_id);
+void tentative_update(LSP_tentative *tentative, int neighbor, long cost, int neighbor_id);
 void pop_and_push_tentative(LSP_tentative *tentative, LSDB *my_db);
-int tentative_end(LSDB *my_db, LSP_tentative *tentative);
+int tentative_end(LSP_tentative *tentative);
 
 /* Debug function */
+void print_send(int id, const char *buff, int len);
+void print_recv(int id, int from, const char *buff);
+void print_log(int id, const char *buff);
+void print_db(LSDB *my_db, LSP *my_LSP);
