@@ -1,6 +1,8 @@
 src/vec_router
 src/ls_router
 log*
+src/example_topology/*
+src/test_topo
 
 # Prerequisites
 *.d
