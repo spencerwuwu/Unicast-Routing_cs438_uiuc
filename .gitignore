@@ -1,5 +1,6 @@
 src/vec_router
 src/ls_router
+log*
 
 # Prerequisites
 *.d
