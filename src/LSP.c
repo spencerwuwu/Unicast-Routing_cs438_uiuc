@@ -77,10 +77,9 @@ char *create_cost_msg(LSP *lsp, int *index) {
     for ( ; i < *index; i++) {
         target = target->next;
     }
-    if (!target->alive) return NULL;
 
     char *buff = calloc(sizeof(char), MSG_SIZE);
-    sprintf(buff, "fcost%d,%d,%ld,%d", lsp->sender_id, target->neighbor, target->cost, target->sequence_number);
+    sprintf(buff, "fcost%d,%d,%ld,%d,%d", lsp->sender_id, target->neighbor, target->cost, target->sequence_number,target->alive);
     return buff;
 }
 
@@ -100,13 +99,14 @@ void receive_cost(LSDB *my_db, LSP *my_LSP, char *msg) {
 
 int receive_lsp(LSDB *my_db, LSP *my_LSP, char *msg) {
     int sender_id, neighbor, sequence_num;
+    int alive;
     long cost;
-    sscanf(msg, "fcost%d,%d,%ld,%d", &sender_id, &neighbor, &cost, &sequence_num);
+    sscanf(msg, "fcost%d,%d,%ld,%d,%d", &sender_id, &neighbor, &cost, &sequence_num, &alive);
 
     if (neighbor == my_LSP->sender_id)
         update_self_lsp(my_db, my_LSP, sender_id, sequence_num, cost, 1);
     if (sender_id != my_LSP->sender_id) 
-        update_LSDB(my_db, sender_id, neighbor, sequence_num, cost);
+        update_LSDB(my_db, sender_id, neighbor, sequence_num, cost, alive);
     return 0;
 }
 
@@ -190,7 +190,7 @@ void init_lsp(LSDB *my_db, int sender_id) {
     if (prev_lsp) prev_lsp->next = lsp;
 }
 
-void update_LSDB(LSDB *my_db, int sender_id, int neighbor, int sequence_num, long cost) {
+void update_LSDB(LSDB *my_db, int sender_id, int neighbor, int sequence_num, long cost, int alive) {
 
     LSP *lsp = my_db->lsp;
     LSP *prev_lsp = NULL;
@@ -207,7 +207,7 @@ void update_LSDB(LSDB *my_db, int sender_id, int neighbor, int sequence_num, lon
                         pair->cost = cost;
                         pair->sequence_number = sequence_num;
                     }
-                    pair->alive = 1;
+                    if (sequence_num > pair->sequence_number) alive = alive;
                     return ; 
                 }
                 prev_pair = pair;
@@ -218,7 +218,7 @@ void update_LSDB(LSDB *my_db, int sender_id, int neighbor, int sequence_num, lon
             pair->neighbor = neighbor;
             pair->sequence_number = sequence_num;
             pair->cost = cost;
-            pair->alive = 1;
+            pair->alive = alive;
             pair->next = NULL;
             if (!lsp->pair) lsp->pair = pair;
             if (prev_pair) prev_pair->next = pair;

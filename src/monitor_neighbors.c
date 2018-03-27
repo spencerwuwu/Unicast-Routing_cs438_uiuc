@@ -126,6 +126,10 @@ void listenForNeighbors()
                 set_pair_alive(my_db, globalMyID, heardFrom);
             }
         }
+        // Calcualte neighbor's aliveness
+        pthread_mutex_lock(&mutex);
+        calculate_neighbor_alive();
+        pthread_mutex_unlock(&mutex);
 
         //Is it a packet from the manager? (see mp2 specification for more details)
         //send format: 'send'<4 ASCII bytes>, destID<net order 2 byte signed>, <some ASCII message>
@@ -166,7 +170,7 @@ void listenForNeighbors()
             pthread_mutex_lock(&mutex);
             update_self_lsp(my_db, my_LSP, target, -1, cost, 0);
             pthread_mutex_unlock(&mutex);
-        print_db(my_db, my_LSP);
+            print_db(my_db, my_LSP);
 
         } else if(!strncmp(recvBuf, "fcost", 5)) {
             receive_lsp(my_db, my_LSP, recvBuf);
@@ -176,6 +180,26 @@ void listenForNeighbors()
     close(globalSocketUDP);
 }
 // TODO initial of cost 1
+
+void calculate_neighbor_alive() {
+    struct timeval current;
+    gettimeofday(&current, NULL); 
+    LSP_pair *pair = my_LSP->pair;
+    while (pair) {
+        if (current.tv_sec - globalLastHeartbeat[pair->neighbor].tv_sec > 2) {
+            if (pair->alive) { // if pair is alive and pair is lost for 2 sec
+                pair->alive = 0;
+                pair->sequence_number++;;
+            }
+        } else { // if pair is dead
+            if (!pair->alive) {
+                pair->alive = 1;
+                pair->sequence_number++;;
+            }
+        }
+        pair = pair->next;
+    }
+}
 
 void log_send(int target, unsigned char *buff, int length) {
     fprintf(stderr, "%d: ", globalMyID);

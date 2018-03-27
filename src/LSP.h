@@ -68,7 +68,7 @@ void update_self_lsp(LSDB *my_db, LSP *my_LSP, int sender_id, int sequence_num, 
 
 void init_lsp(LSDB *my_db, int sender_id);
 
-void update_LSDB(LSDB *my_db, int sender_id, int neighbor, int sequence_num, long cost);
+void update_LSDB(LSDB *my_db, int sender_id, int neighbor, int sequence_num, long cost, int alive);
 
 int is_neighbor(LSP *my_LSP, int target);
 
