@@ -147,14 +147,34 @@ void listenForNeighbors()
             } else {
                 int next_hop = LSP_decide(my_db, target);
                 if (next_hop >= 0) {
+                    char *send_buf = malloc(bytesRecvd + 1);
+                    send_buf[0] = 'f';
+                    int send_i = 1;
+                    for ( ;send_i <= bytesRecvd; send_i++)
+                        send_buf[send_i] = recvBuf[send_i - 1];
+                    sendto(globalSocketUDP, send_buf, bytesRecvd + 1, 0, 
+                            (struct sockaddr*)&globalNodeAddrs[next_hop], 
+                            sizeof(globalNodeAddrs[next_hop]));
+                    log_send(target, next_hop, recvBuf, bytesRecvd);
+                } else {
+                    log_failed(target);
+                }
+            }
+        }else if(!strncmp(recvBuf, "fsend", 5)) {
+            int16_t target = (recvBuf[5] << 8) + (recvBuf[6] & 0xff);
+            pthread_mutex_lock(&mutex);
+            build_topo(my_db, my_LSP);
+            pthread_mutex_unlock(&mutex);
+
+            if (target == (int16_t)globalMyID) {
+                log_recv(recvBuf, bytesRecvd);
+            } else {
+                int next_hop = LSP_decide(my_db, target);
+                if (next_hop >= 0) {
                     sendto(globalSocketUDP, recvBuf, bytesRecvd, 0, 
                             (struct sockaddr*)&globalNodeAddrs[next_hop], 
                             sizeof(globalNodeAddrs[next_hop]));
-                    if (is_neighbor(my_LSP, target)) {
-                        log_send(target, next_hop, recvBuf, bytesRecvd);
-                    } else {
-                        log_forward(target, next_hop, recvBuf, bytesRecvd);
-                    }
+                    log_forward(target, next_hop, recvBuf, bytesRecvd);
                 } else {
                     log_failed(target);
                 }
@@ -201,50 +221,50 @@ void calculate_neighbor_alive() {
 }
 
 void log_send(int target, int next, unsigned char *buff, int length) {
-    fprintf(stderr, "%d: ", globalMyID);
+    //fprintf(stderr, "%d: ", globalMyID);
     fprintf(log_file, "sending packet dest %d nexthop %d message ", target, next);
-    fprintf(stderr, "sending packet dest %d nexthop %d message ", target, next);
+    //fprintf(stderr, "sending packet dest %d nexthop %d message ", target, next);
     int i = 6;
     for ( ; i < length; i++) {
         fprintf(log_file, "%c", buff[i]);
-        fprintf(stderr, "%c", buff[i]);
+        //fprintf(stderr, "%c", buff[i]);
     }
     fprintf(log_file, "\n");
-    fprintf(stderr, "\n");
+    //fprintf(stderr, "\n");
     fflush(log_file);
 }
 
 void log_recv(char *buff, int length) {
     fprintf(log_file, "receive packet message ");
-    fprintf(stderr, "%d: ", globalMyID);
-    fprintf(stderr, "receive packet message ");
+    //fprintf(stderr, "%d: ", globalMyID);
+    //fprintf(stderr, "receive packet message ");
     int i = 6;
     for ( ; i < length; i++) {
         fprintf(log_file, "%c", buff[i]);
-        fprintf(stderr, "%c", buff[i]);
+        //fprintf(stderr, "%c", buff[i]);
     }
     fprintf(log_file, "\n");
-    fprintf(stderr, "\n");
+    //fprintf(stderr, "\n");
     fflush(log_file);
 }
 
 void log_forward(int target, int next_hop, unsigned char *buff, int length) {
     fprintf(log_file, "forward packet dest %d nexthop %d message ", target, next_hop);
-    fprintf(stderr, "%d: ", globalMyID);
-    fprintf(stderr, "forward packet dest %d nexthop %d message ", target, next_hop);
+    //fprintf(stderr, "%d: ", globalMyID);
+    //fprintf(stderr, "forward packet dest %d nexthop %d message ", target, next_hop);
     int i = 6;
     for ( ; i < length; i++) {
         fprintf(log_file, "%c", buff[i]);
-        fprintf(stderr, "%c", buff[i]);
+        //fprintf(stderr, "%c", buff[i]);
     }
     fprintf(log_file, "\n");
-    fprintf(stderr, "\n");
+    //fprintf(stderr, "\n");
     fflush(log_file);
 }
 
 void log_failed(int target) {
     fprintf(log_file, "unreachable dest %d\n", target);
-    fprintf(stderr, "%d: ", globalMyID);
-    fprintf(stderr, "unreachable dest %d\n", target);
+    //fprintf(stderr, "%d: ", globalMyID);
+    //fprintf(stderr, "unreachable dest %d\n", target);
     fflush(log_file);
 }
