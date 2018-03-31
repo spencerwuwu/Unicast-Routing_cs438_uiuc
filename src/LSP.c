@@ -269,15 +269,16 @@ LSP_tentative *init_tentative() {
     return tentative;
 }
 
-void tentative_update(LSP_tentative *tentative, int target, long cost, int neighbor_id) {
+void tentative_update(LSP_tentative *tentative, int target, long cost, int neighbor_id, int comefrom) {
     LSP_tentative_node *node = tentative->node;
     LSP_tentative_node *prev = NULL;
     while (node) {
         if (node->target_id == target) {
             if (cost < node->cost ||
-                    (cost == node->cost && neighbor_id < node->neighbor_id)) {
+                    (cost == node->cost && comefrom < node->come_from_id)) {
                 node->cost = cost;
                 node->neighbor_id = neighbor_id;
+                node->come_from_id = comefrom;
             }
             return;
         }
@@ -288,6 +289,7 @@ void tentative_update(LSP_tentative *tentative, int target, long cost, int neigh
     node = malloc(sizeof(LSP_tentative_node));
     node->target_id = target;
     node->cost = cost;
+    node->come_from_id = comefrom;
     node->neighbor_id = neighbor_id;
     node->prev = prev;
     if (!tentative->node) tentative->node = node;
@@ -317,6 +319,7 @@ void pop_and_push_tentative(LSP_tentative *tentative, LSDB *my_db) {
     topo->target_id = least->target_id;
     topo->cost = least->cost;
     topo->neighbor_id = least->neighbor_id;
+    topo->come_from_id = least->come_from_id;
     if (!my_db->topo) my_db->topo = topo;
     if (prev_topo) prev_topo->next = topo;
 
@@ -340,12 +343,13 @@ void pop_and_push_tentative(LSP_tentative *tentative, LSDB *my_db) {
     LSP *lsp = get_node(my_db, topo->target_id);
     LSP_pair *pair = lsp->pair;
     while (pair) {
-        if (pair->neighbor != my_db->my_ID &&  pair->alive && 
+        if (pair->alive && 
                 !check_node_confirmed(my_db, pair->neighbor))  {
-            tentative_update(tentative, pair->neighbor, pair->cost + least_cost, topo->neighbor_id);
+            tentative_update(tentative, pair->neighbor, pair->cost + least_cost, topo->neighbor_id, topo->target_id);
         }
         pair = pair->next;
     }
+
 }
 
 void build_topo(LSDB *my_db, LSP *my_LSP) {
@@ -357,7 +361,7 @@ void build_topo(LSDB *my_db, LSP *my_LSP) {
     struct LSP_pair *pair = my_LSP->pair;
     while (pair) {
         if (pair->alive) {
-            tentative_update(tentative, pair->neighbor, pair->cost, pair->neighbor);
+            tentative_update(tentative, pair->neighbor, pair->cost, pair->neighbor, my_db->my_ID);
         }
         pair = pair->next;
     }
@@ -371,7 +375,6 @@ void build_topo(LSDB *my_db, LSP *my_LSP) {
     free(tentative);
 
 }
-
 
 
 void cleanup_topo(LSDB *my_db) {

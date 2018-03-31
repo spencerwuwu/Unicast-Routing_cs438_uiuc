@@ -138,13 +138,19 @@ void listenForNeighbors()
             //print_recv(globalMyID, heardFrom, recvBuf);
             //print_send(globalMyID, recvBuf, bytesRecvd);
             int16_t target = (recvBuf[4] << 8) + (recvBuf[5] & 0xff);
-            pthread_mutex_lock(&mutex);
-            build_topo(my_db, my_LSP);
-            pthread_mutex_unlock(&mutex);
 
+                pthread_mutex_lock(&mutex);
+                build_topo(my_db, my_LSP);
+                pthread_mutex_unlock(&mutex);
             if (target == (int16_t)globalMyID) {
                 log_recv(recvBuf, bytesRecvd);
             } else {
+                /*
+                pthread_mutex_lock(&mutex);
+                build_topo_backward(my_db, target);
+                pthread_mutex_unlock(&mutex);
+                int next_hop = LSP_decide_backward(my_db, target);
+                */
                 int next_hop = LSP_decide(my_db, target);
                 if (next_hop >= 0) {
                     char *send_buf = malloc(bytesRecvd + 1);
@@ -162,13 +168,19 @@ void listenForNeighbors()
             }
         }else if(!strncmp(recvBuf, "fsend", 5)) {
             int16_t target = (recvBuf[5] << 8) + (recvBuf[6] & 0xff);
-            pthread_mutex_lock(&mutex);
-            build_topo(my_db, my_LSP);
-            pthread_mutex_unlock(&mutex);
 
+                pthread_mutex_lock(&mutex);
+                build_topo(my_db, my_LSP);
+                pthread_mutex_unlock(&mutex);
             if (target == (int16_t)globalMyID) {
                 log_recv(recvBuf, bytesRecvd);
             } else {
+                /*
+                pthread_mutex_lock(&mutex);
+                build_topo_backward(my_db, target);
+                pthread_mutex_unlock(&mutex);
+                int next_hop = LSP_decide_backward(my_db, target);
+                */
                 int next_hop = LSP_decide(my_db, target);
                 if (next_hop >= 0) {
                     sendto(globalSocketUDP, recvBuf, bytesRecvd, 0, 
