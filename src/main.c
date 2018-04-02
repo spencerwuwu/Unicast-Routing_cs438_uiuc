@@ -89,7 +89,9 @@ int main(int argc, char** argv)
 	
     // Init local LSP, LSDB, file I/O
     init_cost = fopen(argv[2], "r");
-    log_file = fopen(argv[3], "w+");
+    log_file = fopen(argv[3], "w");
+    fclose(log_file);
+    log_file = fopen(argv[3], "a+");
     my_LSP = init_local_LSP(globalMyID, init_cost);
     my_db = init_LSDB(globalMyID);
     my_db->lsp = my_LSP;

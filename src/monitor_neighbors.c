@@ -153,7 +153,7 @@ void listenForNeighbors()
                 */
                 int next_hop = LSP_decide(my_db, target);
                 if (next_hop >= 0) {
-                    char *send_buf = malloc(bytesRecvd + 1);
+                    unsigned char *send_buf = malloc(bytesRecvd + 1);
                     send_buf[0] = 'f';
                     int send_i = 1;
                     for ( ;send_i <= bytesRecvd; send_i++)
@@ -173,7 +173,7 @@ void listenForNeighbors()
                 build_topo(my_db, my_LSP);
                 pthread_mutex_unlock(&mutex);
             if (target == (int16_t)globalMyID) {
-                log_recv(recvBuf, bytesRecvd);
+                log_recv_new(recvBuf, bytesRecvd);
             } else {
                 /*
                 pthread_mutex_lock(&mutex);
@@ -186,7 +186,7 @@ void listenForNeighbors()
                     sendto(globalSocketUDP, recvBuf, bytesRecvd, 0, 
                             (struct sockaddr*)&globalNodeAddrs[next_hop], 
                             sizeof(globalNodeAddrs[next_hop]));
-                    log_forward(target, next_hop, recvBuf, bytesRecvd);
+                    log_forward_new(target, next_hop, recvBuf, bytesRecvd);
                 } else {
                     log_failed(target);
                 }
@@ -260,11 +260,39 @@ void log_recv(char *buff, int length) {
     fflush(log_file);
 }
 
+void log_recv_new(char *buff, int length) {
+    fprintf(log_file, "receive packet message ");
+    //fprintf(stderr, "%d: ", globalMyID);
+    //fprintf(stderr, "receive packet message ");
+    int i = 7;
+    for ( ; i < length; i++) {
+        fprintf(log_file, "%c", buff[i]);
+        //fprintf(stderr, "%c", buff[i]);
+    }
+    fprintf(log_file, "\n");
+    //fprintf(stderr, "\n");
+    fflush(log_file);
+}
+
 void log_forward(int target, int next_hop, unsigned char *buff, int length) {
     fprintf(log_file, "forward packet dest %d nexthop %d message ", target, next_hop);
     //fprintf(stderr, "%d: ", globalMyID);
     //fprintf(stderr, "forward packet dest %d nexthop %d message ", target, next_hop);
     int i = 6;
+    for ( ; i < length; i++) {
+        fprintf(log_file, "%c", buff[i]);
+        //fprintf(stderr, "%c", buff[i]);
+    }
+    fprintf(log_file, "\n");
+    //fprintf(stderr, "\n");
+    fflush(log_file);
+}
+
+void log_forward_new(int target, int next_hop, unsigned char *buff, int length) {
+    fprintf(log_file, "forward packet dest %d nexthop %d message ", target, next_hop);
+    //fprintf(stderr, "%d: ", globalMyID);
+    //fprintf(stderr, "forward packet dest %d nexthop %d message ", target, next_hop);
+    int i = 7;
     for ( ; i < length; i++) {
         fprintf(log_file, "%c", buff[i]);
         //fprintf(stderr, "%c", buff[i]);
