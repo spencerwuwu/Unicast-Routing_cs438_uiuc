@@ -61,7 +61,8 @@ void* announceToNeighbors(void* unusedParam)
     while(1) {
         /*
         fprintf(stderr, "announce:");
-        print_db(my_db, my_LSP);
+        if (globalMyID == 5)
+            print_db(my_db, my_LSP);
         */
         lsp = my_db->lsp;
         while (lsp) {
@@ -80,7 +81,7 @@ void* announceToNeighbors(void* unusedParam)
         }
         hackyBroadcast(alive_msg, strlen(alive_msg) + 1);
         //nanosleep(&sleepFor, 0);
-        nanosleep(&sleepInst, 0);
+
     }
 }
 
@@ -125,10 +126,6 @@ void listenForNeighbors()
                 set_pair_alive(my_db, globalMyID, heardFrom);
             }
         }
-        // Calcualte neighbor's aliveness
-        pthread_mutex_lock(&mutex);
-        calculate_neighbor_alive();
-        pthread_mutex_unlock(&mutex);
 
         //Is it a packet from the manager? (see mp2 specification for more details)
         //send format: 'send'<4 ASCII bytes>, destID<net order 2 byte signed>, <some ASCII message>
@@ -212,99 +209,127 @@ void listenForNeighbors()
 }
 // TODO initial of cost 1
 
-void calculate_neighbor_alive() {
+void *calculate_neighbor_alive() {
     struct timeval current;
-    gettimeofday(&current, NULL); 
-    LSP_pair *pair = my_LSP->pair;
-    while (pair) {
-        if (current.tv_sec - globalLastHeartbeat[pair->neighbor].tv_sec > 2) {
-            if (pair->alive) { // if pair is alive and pair is lost for 2 sec
-                pair->alive = 0;
-                pair->sequence_number++;;
+    LSP *lsp;
+    while (1) {
+        sleep(1);
+        gettimeofday(&current, NULL); 
+        pthread_mutex_lock(&mutex);
+        LSP_pair *pair = my_LSP->pair;
+        while (pair) {
+            if (current.tv_sec - globalLastHeartbeat[pair->neighbor].tv_sec > 1) {
+                if (pair->alive) { // if pair is alive and pair is lost for 1 sec
+                    pair->alive = 0;
+                    pair->sequence_number++;;
+                }
+
+                // set up for neighbor db
+                lsp = get_node(my_db, pair->neighbor);
+                LSP_pair *tmp = get_pair(lsp, globalMyID);
+                if (pair) {
+                    if (pair->alive) {
+                        pair->alive = 0;
+                        pair->sequence_number++;;
+                    }
+                }
+
+            } else { // if pair is dead
+                if (!pair->alive) {
+                    pair->alive = 1;
+                    pair->sequence_number++;;
+                }
+
+                // set up for neighbor db
+                lsp = get_node(my_db, pair->neighbor);
+                LSP_pair *tmp = get_pair(lsp, globalMyID);
+                if (pair) {
+                    if (!pair->alive) {
+                        pair->alive = 1;
+                        pair->sequence_number++;;
+                    }
+                }
+
             }
-        } else { // if pair is dead
-            if (!pair->alive) {
-                pair->alive = 1;
-                pair->sequence_number++;;
-            }
+            pair = pair->next;
         }
-        pair = pair->next;
+        pthread_mutex_unlock(&mutex);
+        }
     }
-}
 
-void log_send(int target, int next, unsigned char *buff, int length) {
-    //fprintf(stderr, "%d: ", globalMyID);
-    fprintf(log_file, "sending packet dest %d nexthop %d message ", target, next);
-    //fprintf(stderr, "sending packet dest %d nexthop %d message ", target, next);
-    int i = 6;
-    for ( ; i < length; i++) {
-        fprintf(log_file, "%c", buff[i]);
-        //fprintf(stderr, "%c", buff[i]);
+    void log_send(int target, int next, unsigned char *buff, int length) {
+        //fprintf(stderr, "%d: ", globalMyID);
+        fprintf(log_file, "sending packet dest %d nexthop %d message ", target, next);
+        //fprintf(stderr, "sending packet dest %d nexthop %d message ", target, next);
+        int i = 6;
+        for ( ; i < length; i++) {
+            fprintf(log_file, "%c", buff[i]);
+            //fprintf(stderr, "%c", buff[i]);
+        }
+        fprintf(log_file, "\n");
+        //fprintf(stderr, "\n");
+        fflush(log_file);
     }
-    fprintf(log_file, "\n");
-    //fprintf(stderr, "\n");
-    fflush(log_file);
-}
 
-void log_recv(char *buff, int length) {
-    fprintf(log_file, "receive packet message ");
-    //fprintf(stderr, "%d: ", globalMyID);
-    //fprintf(stderr, "receive packet message ");
-    int i = 6;
-    for ( ; i < length; i++) {
-        fprintf(log_file, "%c", buff[i]);
-        //fprintf(stderr, "%c", buff[i]);
+    void log_recv(char *buff, int length) {
+        fprintf(log_file, "receive packet message ");
+        //fprintf(stderr, "%d: ", globalMyID);
+        //fprintf(stderr, "receive packet message ");
+        int i = 6;
+        for ( ; i < length; i++) {
+            fprintf(log_file, "%c", buff[i]);
+            //fprintf(stderr, "%c", buff[i]);
+        }
+        fprintf(log_file, "\n");
+        //fprintf(stderr, "\n");
+        fflush(log_file);
     }
-    fprintf(log_file, "\n");
-    //fprintf(stderr, "\n");
-    fflush(log_file);
-}
 
-void log_recv_new(char *buff, int length) {
-    fprintf(log_file, "receive packet message ");
-    //fprintf(stderr, "%d: ", globalMyID);
-    //fprintf(stderr, "receive packet message ");
-    int i = 7;
-    for ( ; i < length; i++) {
-        fprintf(log_file, "%c", buff[i]);
-        //fprintf(stderr, "%c", buff[i]);
+    void log_recv_new(char *buff, int length) {
+        fprintf(log_file, "receive packet message ");
+        //fprintf(stderr, "%d: ", globalMyID);
+        //fprintf(stderr, "receive packet message ");
+        int i = 7;
+        for ( ; i < length; i++) {
+            fprintf(log_file, "%c", buff[i]);
+            //fprintf(stderr, "%c", buff[i]);
+        }
+        fprintf(log_file, "\n");
+        //fprintf(stderr, "\n");
+        fflush(log_file);
     }
-    fprintf(log_file, "\n");
-    //fprintf(stderr, "\n");
-    fflush(log_file);
-}
 
-void log_forward(int target, int next_hop, unsigned char *buff, int length) {
-    fprintf(log_file, "forward packet dest %d nexthop %d message ", target, next_hop);
-    //fprintf(stderr, "%d: ", globalMyID);
-    //fprintf(stderr, "forward packet dest %d nexthop %d message ", target, next_hop);
-    int i = 6;
-    for ( ; i < length; i++) {
-        fprintf(log_file, "%c", buff[i]);
-        //fprintf(stderr, "%c", buff[i]);
+    void log_forward(int target, int next_hop, unsigned char *buff, int length) {
+        fprintf(log_file, "forward packet dest %d nexthop %d message ", target, next_hop);
+        //fprintf(stderr, "%d: ", globalMyID);
+        //fprintf(stderr, "forward packet dest %d nexthop %d message ", target, next_hop);
+        int i = 6;
+        for ( ; i < length; i++) {
+            fprintf(log_file, "%c", buff[i]);
+            //fprintf(stderr, "%c", buff[i]);
+        }
+        fprintf(log_file, "\n");
+        //fprintf(stderr, "\n");
+        fflush(log_file);
     }
-    fprintf(log_file, "\n");
-    //fprintf(stderr, "\n");
-    fflush(log_file);
-}
 
-void log_forward_new(int target, int next_hop, unsigned char *buff, int length) {
-    fprintf(log_file, "forward packet dest %d nexthop %d message ", target, next_hop);
-    //fprintf(stderr, "%d: ", globalMyID);
-    //fprintf(stderr, "forward packet dest %d nexthop %d message ", target, next_hop);
-    int i = 7;
-    for ( ; i < length; i++) {
-        fprintf(log_file, "%c", buff[i]);
-        //fprintf(stderr, "%c", buff[i]);
+    void log_forward_new(int target, int next_hop, unsigned char *buff, int length) {
+        fprintf(log_file, "forward packet dest %d nexthop %d message ", target, next_hop);
+        //fprintf(stderr, "%d: ", globalMyID);
+        //fprintf(stderr, "forward packet dest %d nexthop %d message ", target, next_hop);
+        int i = 7;
+        for ( ; i < length; i++) {
+            fprintf(log_file, "%c", buff[i]);
+            //fprintf(stderr, "%c", buff[i]);
+        }
+        fprintf(log_file, "\n");
+        //fprintf(stderr, "\n");
+        fflush(log_file);
     }
-    fprintf(log_file, "\n");
-    //fprintf(stderr, "\n");
-    fflush(log_file);
-}
 
-void log_failed(int target) {
-    fprintf(log_file, "unreachable dest %d\n", target);
-    //fprintf(stderr, "%d: ", globalMyID);
-    //fprintf(stderr, "unreachable dest %d\n", target);
-    fflush(log_file);
-}
+    void log_failed(int target) {
+        fprintf(log_file, "unreachable dest %d\n", target);
+        //fprintf(stderr, "%d: ", globalMyID);
+        //fprintf(stderr, "unreachable dest %d\n", target);
+        fflush(log_file);
+    }

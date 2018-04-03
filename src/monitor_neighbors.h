@@ -2,7 +2,7 @@ void hackyBroadcast(const char* buf, int length);
 void* announceToNeighbors(void* unusedParam);
 void listenForNeighbors();
 
-void calculate_neighbor_alive();
+void *calculate_neighbor_alive();
 
 /* log file format */
 void log_send(int target, int next, unsigned char *buff, int length);

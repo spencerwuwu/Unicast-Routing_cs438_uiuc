@@ -89,6 +89,7 @@ int check_node_alive(LSDB *my_db, int id);
 int check_node_confirmed(LSDB *my_db, int id);
 void make_node_confirmed(LSDB *my_db, int id);
 LSP *get_node(LSDB *my_db, int id);
+LSP_pair *get_pair(LSP *lsp, int id);
 void tentative_update(LSP_tentative *tentative, int neighbor, long cost, int neighbor_id, int comefrom);
 void pop_and_push_tentative(LSP_tentative *tentative, LSDB *my_db);
 int tentative_end(LSP_tentative *tentative);

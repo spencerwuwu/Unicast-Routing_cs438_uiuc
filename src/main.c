@@ -102,6 +102,8 @@ int main(int argc, char** argv)
 	pthread_create(&announcerThread, 0, announceToNeighbors, (void*)0);
 	
 	
+	pthread_t checkAlive;
+	pthread_create(&checkAlive, 0, calculate_neighbor_alive, (void*)0);
 	
 	
 	//good luck, have fun!
