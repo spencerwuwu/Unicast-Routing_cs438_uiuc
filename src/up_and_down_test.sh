@@ -11,7 +11,7 @@ echo "./manager_send 5 send 7 path:5-6-7"
 sleep 1
 ./bring_down.sh 6 7
 
-sleep 5
+sleep 3
 ./manager_send 5 send 7 cant-send
 echo "./manager_send 5 send 7 cantsend"
 
@@ -19,24 +19,41 @@ sleep 1
 ./bring_up.sh 4 7
 ./bring_up.sh 6 7
 
-sleep 5
+sleep 3
 ./manager_send 5 send 7 path:5-1-4-7
 echo "./manager_send 5 send 7 path:5-1-4-7"
 
 sleep 1
 ./manager_send 6 send 3 path:6-5-2-3 
-echo "./manager_send 5 send 7 path:6-5-2-3"
+echo "./manager_send 6 send 3 path:6-5-2-3"
 
 sleep 1
 ./manager_send 6 send 0 path:6-1-255-0 
-echo "./manager_send 5 send 7 path:6-1-255-0"
+echo "./manager_send 6 send 0 path:6-1-255-0"
 
 sleep 1
 ./bring_up.sh 6 0
 
-sleep 5
+sleep 3
 ./manager_send 6 send 0 path:6-0 
-echo "./manager_send 5 send 7 path:6-0"
+echo "./manager_send 6 send 0 path:6-0"
+
+sleep 1
+./manager_send 1 cost 2 1
+echo "./manager_send 1 cost 2 1"
+
+sleep 3
+./manager_send 1 send 3 path:1-2-3
+echo "./manager_send 1 send 3 path:1-2-3"
+
+sleep 1
+./manager_send 1 cost 2 60 
+echo "./manager_send 1 cost 2 60"
+
+sleep 3
+./manager_send 1 send 3 path:1-4-3
+echo "./manager_send 1 send 3 path:1-4-3"
+
 
 ./stop_node.sh
 
