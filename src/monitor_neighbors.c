@@ -49,11 +49,11 @@ void* announceToNeighbors(void* unusedParam)
     sprintf(alive_msg, "alive%03d", globalMyID);
     struct timespec sleepFor;
     sleepFor.tv_sec = 1;
-    sleepFor.tv_nsec = 30 * 1000 * 1000; //30 ms
+    sleepFor.tv_nsec = 10 * 1000 * 1000; //10 ms
 
     struct timespec sleepInst;
     sleepInst.tv_sec = 0;
-    sleepInst.tv_nsec = 3 * 1000 * 1000; //5 ms
+    sleepInst.tv_nsec = 3 * 1000 * 1000; //3 ms
     int index = 0;
     char *buff = NULL;
     LSP *lsp = NULL;
@@ -89,6 +89,7 @@ void* announceToNeighbors(void* unusedParam)
             lsp = lsp->next;
         }
         hackyBroadcast(alive_msg, strlen(alive_msg) + 1);
+        nanosleep(&sleepFor, 0);
         //nanosleep(&sleepFor, 0);
         //sleep(1);
 
@@ -274,16 +275,16 @@ void *calculate_neighbor_alive() {
 }
 
 void log_send(int target, int next, unsigned char *buff, int length) {
-    fprintf(stderr, "%d: ", globalMyID);
+    //fprintf(stderr, "%d: ", globalMyID);
     fprintf(log_file, "sending packet dest %d nexthop %d message ", target, next);
-    fprintf(stderr, "sending packet dest %d nexthop %d message ", target, next);
+    //fprintf(stderr, "sending packet dest %d nexthop %d message ", target, next);
     int i = 6;
     for ( ; i < length; i++) {
         fprintf(log_file, "%c", buff[i]);
-        fprintf(stderr, "%c", buff[i]);
+        //fprintf(stderr, "%c", buff[i]);
     }
     fprintf(log_file, "\n");
-    fprintf(stderr, "\n");
+    //fprintf(stderr, "\n");
     fflush(log_file);
 }
 

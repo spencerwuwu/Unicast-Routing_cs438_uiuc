@@ -192,33 +192,6 @@ int receive_lsp(LSDB *my_db, LSP *my_LSP, char *msg) {
 
 void set_pair_alive(LSDB *my_db, int sender_id, int neighbor) {
     LSP *lsp = get_node(my_db, sender_id);
-    /*
-       LSP_pair *pair = lsp->pair;
-       while (pair) {
-       if (pair->neighbor == neighbor) { 
-    //if (globalMyID == 1) fprintf(stderr, "%d set %d alive\n", globalMyID, heardFrom);
-    //if (sender_id == 1) fprintf(stderr, "%d set %d alive\n", sender_id, neighbor);
-    if (!pair->alive) {
-    pair->alive = 1;
-    pair->sequence_number++;
-    }
-    lsp = get_node(my_db, neighbor);
-    pair = lsp->pair;
-    while (pair) {
-    if (pair->neighbor == sender_id) { 
-    if (!pair->alive) {
-    pair->alive = 1;
-    pair->sequence_number++;
-    }
-    break;
-    }
-    pair = pair->next;
-    }
-    break;
-    }
-    pair = pair->next;
-    }
-    */
     LSP_pair *pair = get_pair(lsp, neighbor);
     if (pair) {
         if (!pair->alive) {
@@ -468,6 +441,7 @@ void pop_and_push_tentative(LSP_tentative *tentative, LSDB *my_db) {
 
     // Update the nodes of target to tentative
     LSP *lsp = get_node(my_db, topo->target_id);
+    if (!lsp) return;
     LSP_pair *pair = lsp->pair;
     while (pair) {
         if (pair->alive && pair->neighbor != my_db->my_ID &&
@@ -482,7 +456,6 @@ void pop_and_push_tentative(LSP_tentative *tentative, LSDB *my_db) {
 void build_topo(LSDB *my_db, LSP *my_LSP) {
     if (my_db->topo) cleanup_topo(my_db);
 
-    //print_db(my_db, my_LSP);
     LSP_tentative *tentative = init_tentative();
 
     // Init with local
@@ -495,6 +468,17 @@ void build_topo(LSDB *my_db, LSP *my_LSP) {
     }
 
     while (tentative->node) {
+        /* debug section */
+        /*
+        LSP_tentative_node *node = tentative->node;
+        while (node) {
+            if (my_db->my_ID == 0) fprintf(stderr, "node %d-%ld-%d\n", node->target_id, node->cost, node->neighbor_id);
+            node = node->next;
+        }
+        fprintf(stderr, "--------\n");
+        */
+        /* debug section */
+
         // Find the least and add to confirmed
         pop_and_push_tentative(tentative, my_db);
 
@@ -573,6 +557,7 @@ LSP *get_node(LSDB *my_db, int id) {
 }
 
 LSP_pair *get_pair(LSP *lsp, int id) {
+    if (!lsp) return NULL;
     LSP_pair *pair = lsp->pair;
     while (pair) {
         if (pair->neighbor == id) {

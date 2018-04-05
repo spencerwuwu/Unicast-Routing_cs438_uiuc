@@ -31,8 +31,8 @@ do
 	fi
 done
 
-for i in "${node_array[@]}"
-#for i in {0..8}
+#for i in "${node_array[@]}"
+for i in {0..63}
 do
 	echo "./ls_router $i ${dir_name}testinitcosts$i logs/log$i &"
 	./ls_router $i ${dir_name}testinitcosts$i logs/log$i &
