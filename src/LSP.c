@@ -83,6 +83,21 @@ char *create_cost_msg(LSP *lsp, int *index) {
     return buff;
 }
 
+char *create_long_cost_msg(LSP *lsp) {
+    char *msg = calloc(sizeof(char), MSG_SIZE);
+    sprintf(msg, "fcost%d", lsp->sender_id);
+    LSP_pair *target = lsp->pair;
+    char *tmp_msg = calloc(sizeof(char), MSG_SIZE);
+    while (target) {
+        sprintf(tmp_msg, "|%d,%ld,%d,%d", target->neighbor, target->cost, target->sequence_number, target->alive);
+        strcat(msg, tmp_msg);
+        target = target->next;
+    }
+    free(tmp_msg);
+    tmp_msg = NULL;
+    return msg;
+}
+
 /* the whole receive functions are wrapped with mutex at 
  * monitor_neighbors.c
  */
@@ -95,6 +110,71 @@ void receive_cost(LSDB *my_db, LSP *my_LSP, char *msg) {
     for ( ; i < 10; i++) 
         cost = cost * 10 + msg[i] - '0';
     update_self_lsp(my_db, my_LSP, neighbor, -1, cost, 0);
+}
+
+int receive_long_lsp(LSDB *my_db, LSP *my_LSP, char *msg, int length) {
+    int buff_index = 5;
+    int sender_id = 0, neighbor = 0, sequence_num = 0;
+    int alive;
+    long cost = 0;
+    char *ptr = msg + 5;
+    //if (my_db->my_ID == 5) fprintf(stderr, "get %s\n", msg);
+    while (*ptr != '|' && *ptr != '\0') {
+        //if (my_db->my_ID == 5) fprintf(stderr, "%c\n", *ptr);
+        sender_id = sender_id * 10 + (char)*ptr - '0';
+        ptr++;
+        buff_index++;
+    }
+    //fprintf(stderr, "from %d\n", sender_id);
+    ptr++;
+    buff_index++;
+    if (buff_index == length) return 0;
+
+    while (*ptr != '|' && *ptr != '\0' && buff_index != length) {
+        neighbor = 0;
+        sequence_num = 0;
+        cost = 0;
+        // neighbor
+        while (*ptr != ',') {
+            neighbor = neighbor * 10 + (char)*ptr - '0';
+            ptr++;
+            buff_index++;
+            //if (buff_index == length) return 0;
+        }
+        ptr++;
+        buff_index++;
+        if (buff_index == length) return 0;
+        // cost
+        while (*ptr != ',') {
+            cost = cost * 10 + (char)*ptr - '0';
+            ptr++;
+            buff_index++;
+            //if (buff_index == length) return 0;
+        }
+        ptr++;
+        buff_index++;
+        //if (buff_index == length) return 0;
+        // sequence
+        while (*ptr != ',') {
+            sequence_num = sequence_num * 10 + (char)*ptr - '0';
+            ptr++;
+            buff_index++;
+            //if (buff_index == length) return 0;
+        }
+        ptr++;
+        buff_index++;
+        //if (buff_index == length) return 0;
+        alive = *ptr - '0';
+        ptr++;
+        buff_index++;
+        fprintf(stderr, "pair%d,%d,%ld,%d,%d\n", sender_id, neighbor, cost, sequence_num,alive);
+
+        if (neighbor == my_LSP->sender_id)
+            update_self_lsp(my_db, my_LSP, sender_id, sequence_num, cost, 1);
+        if (sender_id != my_LSP->sender_id) 
+            update_LSDB(my_db, sender_id, neighbor, sequence_num, cost, alive);
+    }
+    return 0;
 }
 
 int receive_lsp(LSDB *my_db, LSP *my_LSP, char *msg) {
@@ -113,30 +193,30 @@ int receive_lsp(LSDB *my_db, LSP *my_LSP, char *msg) {
 void set_pair_alive(LSDB *my_db, int sender_id, int neighbor) {
     LSP *lsp = get_node(my_db, sender_id);
     /*
-    LSP_pair *pair = lsp->pair;
+       LSP_pair *pair = lsp->pair;
+       while (pair) {
+       if (pair->neighbor == neighbor) { 
+    //if (globalMyID == 1) fprintf(stderr, "%d set %d alive\n", globalMyID, heardFrom);
+    //if (sender_id == 1) fprintf(stderr, "%d set %d alive\n", sender_id, neighbor);
+    if (!pair->alive) {
+    pair->alive = 1;
+    pair->sequence_number++;
+    }
+    lsp = get_node(my_db, neighbor);
+    pair = lsp->pair;
     while (pair) {
-        if (pair->neighbor == neighbor) { 
-                //if (globalMyID == 1) fprintf(stderr, "%d set %d alive\n", globalMyID, heardFrom);
-                //if (sender_id == 1) fprintf(stderr, "%d set %d alive\n", sender_id, neighbor);
-            if (!pair->alive) {
-                pair->alive = 1;
-                pair->sequence_number++;
-            }
-            lsp = get_node(my_db, neighbor);
-            pair = lsp->pair;
-            while (pair) {
-                if (pair->neighbor == sender_id) { 
-                    if (!pair->alive) {
-                        pair->alive = 1;
-                        pair->sequence_number++;
-                    }
-                    break;
-                }
-                pair = pair->next;
-            }
-            break;
-        }
-        pair = pair->next;
+    if (pair->neighbor == sender_id) { 
+    if (!pair->alive) {
+    pair->alive = 1;
+    pair->sequence_number++;
+    }
+    break;
+    }
+    pair = pair->next;
+    }
+    break;
+    }
+    pair = pair->next;
     }
     */
     LSP_pair *pair = get_pair(lsp, neighbor);
@@ -162,7 +242,7 @@ void set_alive(LSDB *my_db, int id) {
     LSP *lsp = my_db->lsp;
     while (lsp) {
         if (lsp->sender_id == id) {
-            lsp->alive = ALIVE;
+            lsp->alive = 1;
             return;
         }
         lsp = lsp->next;
@@ -313,6 +393,7 @@ void tentative_update(LSP_tentative *tentative, int target, long cost, int neigh
     LSP_tentative_node *prev = NULL;
     while (node) {
         if (node->target_id == target) {
+            //fprintf(stderr, "compare %d %ld %d %d to %d %ld %d %d\n", target, cost, comefrom, neighbor_id, node->target_id, node->cost, node->come_from_id, node->neighbor_id);
             if (cost < node->cost ||
                     (cost == node->cost && comefrom < node->come_from_id)) {
                 node->cost = cost;
@@ -341,9 +422,16 @@ void pop_and_push_tentative(LSP_tentative *tentative, LSDB *my_db) {
     LSP_tentative_node *node = tentative->node;
     LSP_tentative_node *least = node;
     while (node) {
+        //if (my_db->my_ID == 0) fprintf(stderr, "node %d-%ld-%d, least %d-%ld-%d\n", node->target_id, node->cost, node->neighbor_id, least->target_id, least->cost, least->neighbor_id);
         if (node->cost < least->cost) least = node;
+        else if (node->cost == least->cost) {
+            if (node->target_id < least->target_id) {
+                least = node;
+            }
+        }
         node = node->next;
     }
+    //fprintf(stderr, "\n");
 
     // add to confirmed
     LSP_topo *topo = my_db->topo;
@@ -382,7 +470,7 @@ void pop_and_push_tentative(LSP_tentative *tentative, LSDB *my_db) {
     LSP *lsp = get_node(my_db, topo->target_id);
     LSP_pair *pair = lsp->pair;
     while (pair) {
-        if (pair->alive && 
+        if (pair->alive && pair->neighbor != my_db->my_ID &&
                 !check_node_confirmed(my_db, pair->neighbor))  {
             tentative_update(tentative, pair->neighbor, pair->cost + least_cost, topo->neighbor_id, topo->target_id);
         }
@@ -394,12 +482,13 @@ void pop_and_push_tentative(LSP_tentative *tentative, LSDB *my_db) {
 void build_topo(LSDB *my_db, LSP *my_LSP) {
     if (my_db->topo) cleanup_topo(my_db);
 
+    //print_db(my_db, my_LSP);
     LSP_tentative *tentative = init_tentative();
 
     // Init with local
     struct LSP_pair *pair = my_LSP->pair;
     while (pair) {
-        if (pair->alive) {
+        if (pair->alive && pair->neighbor != my_db->my_ID) {
             tentative_update(tentative, pair->neighbor, pair->cost, pair->neighbor, my_db->my_ID);
         }
         pair = pair->next;
@@ -412,6 +501,7 @@ void build_topo(LSDB *my_db, LSP *my_LSP) {
     }
 
     free(tentative);
+    tentative = NULL;
 
 }
 
@@ -524,7 +614,7 @@ void print_db(LSDB *my_db, LSP *my_LSP) {
             fprintf(stderr, " %d-%ld-%d-%d,", pair->neighbor, pair->cost, pair->sequence_number, pair->alive);
             pair = pair->next;
         }
-        fprintf(stderr, "],");
+        fprintf(stderr, "],\n");
         lsp = lsp->next;
     }
     fprintf(stderr, "\n");

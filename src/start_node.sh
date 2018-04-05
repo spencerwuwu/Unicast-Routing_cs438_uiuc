@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Array of nodes
-node_array=(0 1 3 4 5 255)
+node_array=(0 1 2 3 4 5 6 7 255)
 
 # Functions
 usage() {
@@ -32,7 +32,8 @@ do
 done
 
 for i in "${node_array[@]}"
+#for i in {0..8}
 do
-	echo "./ls_router $i ${dir_name}testinitcosts$i log$i &"
-	./ls_router $i ${dir_name}testinitcosts$i log$i &
+	echo "./ls_router $i ${dir_name}testinitcosts$i logs/log$i &"
+	./ls_router $i ${dir_name}testinitcosts$i logs/log$i &
 done

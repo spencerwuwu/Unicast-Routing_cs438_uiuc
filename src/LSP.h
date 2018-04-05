@@ -1,4 +1,4 @@
-#define MSG_SIZE 30 
+#define MSG_SIZE 40 
 #define ALIVE 30 
 
 typedef struct LSP_pair {
@@ -59,12 +59,15 @@ void parse_initcost(int *neighbor, long *cost, char *msg);
  */
 char *create_cost_msg(LSP *lsp, int *index);
 
+char *create_long_cost_msg(LSP *lsp);
 /* Receive and update LSP or LSDB
  * If the message if originally sent by oneself, return 0.
  * Else return 1
  */
 int receive_lsp(LSDB *db, LSP *my_LSP, char *msg);
 void receive_cost(LSDB *db, LSP *my_LSP, char *msg);
+
+int receive_long_lsp(LSDB *my_db, LSP *my_LSP, char *msg, int num);
 
 void update_self_lsp(LSDB *my_db, LSP *my_LSP, int sender_id, int sequence_num, long cost, int alive);
 
