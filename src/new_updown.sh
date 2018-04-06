@@ -14,20 +14,20 @@ sleep 3
 ./manager_send 3 send 0 path:6-0 
 echo "./manager_send 6 send 0 path:6-0"
 
-sleep 0.5
+sleep 1
 ./bring_down.sh 6 0
 
-sleep 0.5
+sleep 1
 ./bring_up.sh 6 0
-sleep 0.5
+sleep 1
 ./bring_down.sh 6 0
 
-sleep 0.5
+sleep 1
 ./bring_up.sh 6 0
-sleep 0.5
+sleep 1
 ./bring_down.sh 6 0
 
-sleep 3
+sleep 5
 ./manager_send 3 send 0 path:6-1-255-0 
 echo "./manager_send 6 send 0 path:6-1-255-0"
 

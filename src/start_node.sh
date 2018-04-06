@@ -2,6 +2,7 @@
 
 # Array of nodes
 node_array=(0 1 2 3 4 5 6 7 255)
+#node_array=(1 2 3 4)
 
 # Functions
 usage() {

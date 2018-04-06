@@ -54,10 +54,12 @@ void* announceToNeighbors(void* unusedParam)
     struct timespec sleepInst;
     sleepInst.tv_sec = 0;
     sleepInst.tv_nsec = 3 * 1000 * 1000; //3 ms
-    int index = 0;
-    char *buff = NULL;
     LSP *lsp = NULL;
-    // TODO
+    // new
+    char *buff = calloc(sizeof(char), MSG_SIZE);
+    //char *buff = NULL;
+    LSP_pair *target = NULL;
+    // new
     while(1) {
         /*
         fprintf(stderr, "announce:");
@@ -66,6 +68,7 @@ void* announceToNeighbors(void* unusedParam)
         */
         lsp = my_db->lsp;
         while (lsp) {
+            /*
             do {
                 //pthread_mutex_lock(&mutex);
                 buff = create_cost_msg(lsp, &index);
@@ -77,20 +80,28 @@ void* announceToNeighbors(void* unusedParam)
                     nanosleep(&sleepInst, 0);
                 }
             } while (index != 0);
-                nanosleep(&sleepInst, 0);
-            /*
-            pthread_mutex_lock(&mutex);
-            buff = create_long_cost_msg(lsp);
-            //if (globalMyID == 5) fprintf(stderr, "%s\n", buff);
-            pthread_mutex_unlock(&mutex);
-            hackyBroadcast(buff, strlen(buff) + 1);
-            free(buff);
-            buff = NULL;
             */
+            // above one is good
+            if (lsp->pair_num != 0) {
+                target = lsp->pair;
+                while (target) {
+                    if (target->dirty_bit != 0) {
+                        target->dirty_bit--;
+                    } else {
+                        target->dirty_bit = 5;
+                        sprintf(buff, "fcost%d,%d,%ld,%d,%d", lsp->sender_id, target->neighbor, target->cost, target->sequence_number,target->alive);
+                        hackyBroadcast(buff, strlen(buff) + 1);
+                        nanosleep(&sleepInst, 0);
+                    }
+                    target = target->next;
+                }
+            }
+            // end of try
+
             lsp = lsp->next;
         }
         hackyBroadcast(alive_msg, strlen(alive_msg) + 1);
-            nanosleep(&sleepFor, 0);
+        nanosleep(&sleepFor, 0);
         //nanosleep(&sleepFor, 0);
         //sleep(1);
 
@@ -147,7 +158,6 @@ void listenForNeighbors()
             //print_recv(globalMyID, heardFrom, recvBuf);
             //print_send(globalMyID, recvBuf, bytesRecvd);
             int16_t target = (recvBuf[4] << 8) + (recvBuf[5] & 0xff);
-            //print_db(my_db, my_LSP);
 
             //pthread_mutex_lock(&mutex);
             build_topo(my_db, my_LSP, -1);
@@ -218,16 +228,15 @@ void listenForNeighbors()
             pthread_mutex_lock(&mutex);
             update_self_lsp(my_db, my_LSP, target, -1, cost, 0);
             pthread_mutex_unlock(&mutex);
-            print_db(my_db, my_LSP);
 
         } else if(!strncmp(recvBuf, "fcost", 5)) {
             pthread_mutex_lock(&mutex);
-               receive_lsp(my_db, my_LSP, recvBuf);
+            receive_lsp(my_db, my_LSP, recvBuf);
             pthread_mutex_unlock(&mutex);
             /*
-            pthread_mutex_lock(&mutex);
-            receive_long_lsp(my_db, my_LSP, recvBuf, bytesRecvd);
-            pthread_mutex_unlock(&mutex);
+               pthread_mutex_lock(&mutex);
+               receive_long_lsp(my_db, my_LSP, recvBuf, bytesRecvd);
+               pthread_mutex_unlock(&mutex);
                */
         }
     }

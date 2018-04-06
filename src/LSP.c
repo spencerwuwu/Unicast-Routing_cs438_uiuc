@@ -84,8 +84,8 @@ char *create_cost_msg(LSP *lsp, int *index) {
         target->dirty_bit--;
         return NULL;
     }
-    target->dirty_bit = 5;
     */
+    target->dirty_bit = 5;
     char *buff = calloc(sizeof(char), MSG_SIZE);
     sprintf(buff, "fcost%d,%d,%ld,%d,%d", lsp->sender_id, target->neighbor, target->cost, target->sequence_number,target->alive);
     return buff;
