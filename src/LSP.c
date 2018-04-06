@@ -44,6 +44,7 @@ LSP *init_local_LSP(int ID, FILE *init_cost) {
         pair->alive = 0;
         pair->prev = prev_pair;
         pair->next = NULL;
+        pair->dirty_bit = 0;
         if (pair_num == 1) lsp->pair = pair;
         if (prev_pair) prev_pair->next = pair;
         prev_pair = pair;
@@ -78,6 +79,13 @@ char *create_cost_msg(LSP *lsp, int *index) {
         target = target->next;
     }
 
+    /*
+    if (target->dirty_bit != 0) {
+        target->dirty_bit--;
+        return NULL;
+    }
+    target->dirty_bit = 5;
+    */
     char *buff = calloc(sizeof(char), MSG_SIZE);
     sprintf(buff, "fcost%d,%d,%ld,%d,%d", lsp->sender_id, target->neighbor, target->cost, target->sequence_number,target->alive);
     return buff;
@@ -87,14 +95,14 @@ char *create_long_cost_msg(LSP *lsp) {
     char *msg = calloc(sizeof(char), MSG_SIZE);
     sprintf(msg, "fcost%d", lsp->sender_id);
     LSP_pair *target = lsp->pair;
-    char *tmp_msg = calloc(sizeof(char), MSG_SIZE);
     while (target) {
+        char *tmp_msg = calloc(sizeof(char), MSG_SIZE);
         sprintf(tmp_msg, "|%d,%ld,%d,%d", target->neighbor, target->cost, target->sequence_number, target->alive);
         strcat(msg, tmp_msg);
         target = target->next;
+        free(tmp_msg);
+        tmp_msg = NULL;
     }
-    free(tmp_msg);
-    tmp_msg = NULL;
     return msg;
 }
 
@@ -167,7 +175,7 @@ int receive_long_lsp(LSDB *my_db, LSP *my_LSP, char *msg, int length) {
         alive = *ptr - '0';
         ptr++;
         buff_index++;
-        fprintf(stderr, "pair%d,%d,%ld,%d,%d\n", sender_id, neighbor, cost, sequence_num,alive);
+        //fprintf(stderr, "pair%d,%d,%ld,%d,%d\n", sender_id, neighbor, cost, sequence_num,alive);
 
         if (neighbor == my_LSP->sender_id)
             update_self_lsp(my_db, my_LSP, sender_id, sequence_num, cost, 1);
@@ -197,6 +205,7 @@ void set_pair_alive(LSDB *my_db, int sender_id, int neighbor) {
         if (!pair->alive) {
             pair->alive = 1;
             pair->sequence_number++;
+            pair->dirty_bit = 0;
         }
         //
         lsp = get_node(my_db, neighbor);
@@ -205,6 +214,7 @@ void set_pair_alive(LSDB *my_db, int sender_id, int neighbor) {
             if (!pair->alive) {
                 pair->alive = 1;
                 pair->sequence_number++;
+                pair->dirty_bit = 0;
             }
         }
         //
@@ -231,12 +241,14 @@ void update_self_lsp(LSDB *my_db, LSP *my_LSP, int sender_id, int sequence_num, 
             if (sequence_num < 0) {
                 target->cost = cost;
                 target->sequence_number++;
+                target->dirty_bit = 0;
             } else if (sequence_num > target->sequence_number 
                     || (sequence_num == target->sequence_number &&
                         sender_id < my_LSP->sender_id)) {
                 target->cost = cost;
                 target->sequence_number = sequence_num;
                 target->alive = alive;
+                target->dirty_bit = 0;
             }
             return;
         }
@@ -253,6 +265,7 @@ void update_self_lsp(LSDB *my_db, LSP *my_LSP, int sender_id, int sequence_num, 
     target->next = NULL;
     target->prev = prev;
     target->alive = alive;
+    target->dirty_bit = 0;
     if (prev) prev->next = target;
     if (!my_LSP->pair) my_LSP->pair = target;
 
@@ -298,6 +311,7 @@ void update_LSDB(LSDB *my_db, int sender_id, int neighbor, int sequence_num, lon
                         pair->cost = cost;
                         pair->sequence_number = sequence_num;
                         pair->alive = alive;
+                        pair->dirty_bit = 0;
                     }
                     if (sequence_num > pair->sequence_number) alive = alive;
                     return ; 
@@ -311,6 +325,7 @@ void update_LSDB(LSDB *my_db, int sender_id, int neighbor, int sequence_num, lon
             pair->sequence_number = sequence_num;
             pair->cost = cost;
             pair->alive = alive;
+            pair->dirty_bit = 0;
             pair->next = NULL;
             if (!lsp->pair) lsp->pair = pair;
             if (prev_pair) prev_pair->next = pair;
@@ -333,6 +348,7 @@ void update_LSDB(LSDB *my_db, int sender_id, int neighbor, int sequence_num, lon
     lsp->pair->cost = cost;
     lsp->pair->alive = 1;
     lsp->pair->sequence_number = sequence_num;
+    lsp->pair->dirty_bit = 0;
     lsp->pair->next = NULL;
 }
 
@@ -453,7 +469,7 @@ void pop_and_push_tentative(LSP_tentative *tentative, LSDB *my_db) {
 
 }
 
-void build_topo(LSDB *my_db, LSP *my_LSP) {
+void build_topo(LSDB *my_db, LSP *my_LSP, int last_node) {
     if (my_db->topo) cleanup_topo(my_db);
 
     LSP_tentative *tentative = init_tentative();
@@ -461,22 +477,23 @@ void build_topo(LSDB *my_db, LSP *my_LSP) {
     // Init with local
     struct LSP_pair *pair = my_LSP->pair;
     while (pair) {
-        if (pair->alive && pair->neighbor != my_db->my_ID) {
+        if (pair->alive && pair->neighbor != my_db->my_ID && pair->neighbor != last_node) {
             tentative_update(tentative, pair->neighbor, pair->cost, pair->neighbor, my_db->my_ID);
         }
         pair = pair->next;
     }
+    make_node_confirmed(my_db, last_node);
 
     while (tentative->node) {
         /* debug section */
         /*
-        LSP_tentative_node *node = tentative->node;
-        while (node) {
-            if (my_db->my_ID == 0) fprintf(stderr, "node %d-%ld-%d\n", node->target_id, node->cost, node->neighbor_id);
-            node = node->next;
-        }
-        fprintf(stderr, "--------\n");
-        */
+           LSP_tentative_node *node = tentative->node;
+           while (node) {
+           if (my_db->my_ID == 0) fprintf(stderr, "node %d-%ld-%d\n", node->target_id, node->cost, node->neighbor_id);
+           node = node->next;
+           }
+           fprintf(stderr, "--------\n");
+           */
         /* debug section */
 
         // Find the least and add to confirmed

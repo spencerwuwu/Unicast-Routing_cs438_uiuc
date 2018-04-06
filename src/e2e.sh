@@ -2,11 +2,11 @@
 ./start_node.sh -d e2e/
 echo "---------------------------------"
 
-sleep 5
-./manager_send 0 send 20 path
-echo "./manager_send 0 send 20 path"
+sleep 7
+./manager_send 0 send 45 path
+echo "./manager_send 0 send 63 path"
 
-sleep 5
+sleep 1
 
 ./stop_node.sh
 
@@ -28,4 +28,8 @@ echo ""
 
 echo "log20"
 cat logs/log20
+echo ""
+
+echo "log63"
+cat logs/log63
 echo ""

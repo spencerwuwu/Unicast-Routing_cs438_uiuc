@@ -67,16 +67,17 @@ void* announceToNeighbors(void* unusedParam)
         lsp = my_db->lsp;
         while (lsp) {
             do {
-                pthread_mutex_lock(&mutex);
+                //pthread_mutex_lock(&mutex);
                 buff = create_cost_msg(lsp, &index);
-                pthread_mutex_unlock(&mutex);
+                //pthread_mutex_unlock(&mutex);
                 if (buff) {
                     hackyBroadcast(buff, strlen(buff) + 1);
                     free(buff);
                     buff = NULL;
+                    nanosleep(&sleepInst, 0);
                 }
-                nanosleep(&sleepInst, 0);
             } while (index != 0);
+                nanosleep(&sleepInst, 0);
             /*
             pthread_mutex_lock(&mutex);
             buff = create_long_cost_msg(lsp);
@@ -89,7 +90,7 @@ void* announceToNeighbors(void* unusedParam)
             lsp = lsp->next;
         }
         hackyBroadcast(alive_msg, strlen(alive_msg) + 1);
-        nanosleep(&sleepFor, 0);
+            nanosleep(&sleepFor, 0);
         //nanosleep(&sleepFor, 0);
         //sleep(1);
 
@@ -146,35 +147,45 @@ void listenForNeighbors()
             //print_recv(globalMyID, heardFrom, recvBuf);
             //print_send(globalMyID, recvBuf, bytesRecvd);
             int16_t target = (recvBuf[4] << 8) + (recvBuf[5] & 0xff);
+            //print_db(my_db, my_LSP);
 
-            pthread_mutex_lock(&mutex);
-            build_topo(my_db, my_LSP);
-            pthread_mutex_unlock(&mutex);
+            //pthread_mutex_lock(&mutex);
+            build_topo(my_db, my_LSP, -1);
+            //pthread_mutex_unlock(&mutex);
 
             if (target == (int16_t)globalMyID) {
                 log_recv(recvBuf, bytesRecvd);
             } else {
                 int next_hop = LSP_decide(my_db, target);
                 if (next_hop >= 0) {
-                    unsigned char *send_buf = malloc(bytesRecvd + 1);
+                    unsigned char *send_buf = malloc(bytesRecvd + 4);
                     send_buf[0] = 'f';
-                    int send_i = 1;
-                    for ( ;send_i <= bytesRecvd; send_i++)
-                        send_buf[send_i] = recvBuf[send_i - 1];
-                    sendto(globalSocketUDP, send_buf, bytesRecvd + 1, 0, 
+                    send_buf[1] = 's';
+                    send_buf[2] = 'e';
+                    send_buf[3] = 'n';
+                    send_buf[4] = 'd';
+                    send_buf[5] = globalMyID / 100;
+                    send_buf[6] = (globalMyID / 10 )% 10;
+                    send_buf[7] = globalMyID % 10;
+                    int send_i = 8;
+                    for ( ;send_i < bytesRecvd + 4; send_i++)
+                        send_buf[send_i] = recvBuf[send_i - 4];
+                    sendto(globalSocketUDP, send_buf, bytesRecvd + 4, 0, 
                             (struct sockaddr*)&globalNodeAddrs[next_hop], 
                             sizeof(globalNodeAddrs[next_hop]));
                     log_send(target, next_hop, recvBuf, bytesRecvd);
+                    free(send_buf);
                 } else {
                     log_failed(target);
                 }
             }
         }else if(!strncmp(recvBuf, "fsend", 5)) {
-            int16_t target = (recvBuf[5] << 8) + (recvBuf[6] & 0xff);
+            int16_t from_node = recvBuf[5] * 100 + recvBuf[6] * 10 + recvBuf[7];
+            int16_t target = (recvBuf[8] << 8) + (recvBuf[9] & 0xff);
 
-            pthread_mutex_lock(&mutex);
-            build_topo(my_db, my_LSP);
-            pthread_mutex_unlock(&mutex);
+            //pthread_mutex_lock(&mutex);
+            build_topo(my_db, my_LSP, from_node);
+            //pthread_mutex_unlock(&mutex);
             if (target == (int16_t)globalMyID) {
                 log_recv_new(recvBuf, bytesRecvd);
             } else {
@@ -186,6 +197,9 @@ void listenForNeighbors()
                    */
                 int next_hop = LSP_decide(my_db, target);
                 if (next_hop >= 0) {
+                    recvBuf[5] = globalMyID / 100;
+                    recvBuf[6] = (globalMyID / 10 )% 10;
+                    recvBuf[7] = globalMyID % 10;
                     sendto(globalSocketUDP, recvBuf, bytesRecvd, 0, 
                             (struct sockaddr*)&globalNodeAddrs[next_hop], 
                             sizeof(globalNodeAddrs[next_hop]));
@@ -232,9 +246,9 @@ void *calculate_neighbor_alive() {
         //sleep(1);
         nanosleep(&sleepFor, 0);
         gettimeofday(&current, NULL); 
-        pthread_mutex_lock(&mutex);
         LSP_pair *pair = my_LSP->pair;
         while (pair) {
+            pthread_mutex_lock(&mutex);
             if (current.tv_sec - globalLastHeartbeat[pair->neighbor].tv_sec > 1) {
                 if (pair->alive) { // if pair is alive and pair is lost for 1 sec
                     pair->alive = 0;
@@ -269,8 +283,8 @@ void *calculate_neighbor_alive() {
 
             }
             pair = pair->next;
+            pthread_mutex_unlock(&mutex);
         }
-        pthread_mutex_unlock(&mutex);
     }
 }
 
@@ -306,7 +320,7 @@ void log_recv_new(char *buff, int length) {
     fprintf(log_file, "receive packet message ");
     //fprintf(stderr, "%d: ", globalMyID);
     //fprintf(stderr, "receive packet message ");
-    int i = 7;
+    int i = 10;
     for ( ; i < length; i++) {
         fprintf(log_file, "%c", buff[i]);
         //fprintf(stderr, "%c", buff[i]);
@@ -334,7 +348,7 @@ void log_forward_new(int target, int next_hop, unsigned char *buff, int length) 
     fprintf(log_file, "forward packet dest %d nexthop %d message ", target, next_hop);
     //fprintf(stderr, "%d: ", globalMyID);
     //fprintf(stderr, "forward packet dest %d nexthop %d message ", target, next_hop);
-    int i = 7;
+    int i = 10;
     for ( ; i < length; i++) {
         fprintf(log_file, "%c", buff[i]);
         //fprintf(stderr, "%c", buff[i]);

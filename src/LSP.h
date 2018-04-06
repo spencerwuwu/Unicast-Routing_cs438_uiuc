@@ -8,6 +8,7 @@ typedef struct LSP_pair {
     int alive;
     struct LSP_pair *next;
     struct LSP_pair *prev;
+    int dirty_bit;
 } LSP_pair;
 
 typedef struct LSP {
@@ -85,7 +86,7 @@ void set_pair_alive(LSDB *my_db, int sender_ID, int neighbor);
 int LSP_decide(LSDB *my_db, int target);
 
 // Topo build entry
-void build_topo(LSDB *my_db, LSP *my_LSP);
+void build_topo(LSDB *my_db, LSP *my_LSP, int last_node);
 LSP_tentative *init_tentative();
 void cleanup_topo(LSDB *my_db);
 int check_node_alive(LSDB *my_db, int id);
